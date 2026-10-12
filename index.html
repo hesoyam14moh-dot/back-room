@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>متاهة</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Tahoma,sans-serif}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+canvas{display:block}
+#menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a0a1f;gap:16px;padding:20px;z-index:100}
+.btn{background:#a855f7;color:#fff;border:none;padding:16px 40px;font-size:18px;border-radius:10px;font-weight:bold;min-width:220px}
+.btn.red{background:#d04060}
+#codeInput{width:200px;padding:16px;font-size:30px;text-align:center;border-radius:12px;border:2px solid #6a4cba;letter-spacing:14px;background:#1a1030;color:#fff;outline:none;font-family:monospace}
+#roomCode{font-size:56px;font-weight:bold;letter-spacing:16px;color:#e9d5ff;padding:18px 34px;background:#1a1030;border:3px solid #a855f7;border-radius:16px;font-family:monospace}
+#status{font-size:14px;color:#8b7ab8;text-align:center;min-height:20px;max-width:90%;line-height:1.8}
+#roomBadge{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(168,85,247,.9);padding:10px 24px;border-radius:12px;font-size:22px;font-weight:bold;color:#fff;z-index:15;display:none;font-family:monospace;letter-spacing:6px}
+#msg{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(168,85,247,.95);padding:12px 24px;border-radius:12px;font-size:18px;display:none;z-index:20;font-weight:bold;white-space:nowrap}
+#role{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);padding:8px 18px;border-radius:10px;font-size:15px;display:none;z-index:14;color:#ffcc44;font-weight:bold}
+#hp{position:fixed;top:14px;left:14px;background:rgba(0,0,0,.7);padding:8px 16px;border-radius:10px;font-size:16px;font-weight:bold;color:#ff6060;z-index:15;display:none;font-family:monospace}
+#stick{position:fixed;left:20px;bottom:20px;width:150px;height:90px;border-radius:45px;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.3);z-index:10;display:none}
+#thumb{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:30px;background:#a855f7;opacity:.9}
+#fire{position:fixed;right:20px;bottom:140px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f06080,#a02040);border:2px solid #ff4060;color:#fff;font-weight:bold;font-size:20px;display:none;align-items:center;justify-content:center;z-index:10}
+#sprint{position:fixed;right:20px;bottom:20px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#60c0ff,#2060a0);border:2px solid #4090ff;color:#fff;font-weight:bold;font-size:18px;display:none;align-items:center;justify-content:center;z-index:10;transition:background .15s}
+#sprint.on{background:radial-gradient(circle at 35% 30%,#60ff90,#20a060);border-color:#40ff80;box-shadow:0 0 25px rgba(80,255,120,.8)}
+</style>
+</head>
+<body>
+<div id="menu">
+ <button class="btn" id="createBtn">إنشاء (أنا الوحش)</button>
+ <button class="btn" id="joinBtn">انضمام (أنا الهارب)</button>
+ <input id="codeInput" maxlength="3" placeholder="123" inputmode="numeric" style="display:none" autocomplete="off"/>
+ <button class="btn" id="joinOk" style="display:none">دخول</button>
+ <button class="btn red" id="retryBtn" style="display:none">إعادة المحاولة</button>
+ <div id="roomCode" style="display:none"></div>
+ <div id="status">اختر: إنشاء غرفة أو انضمام</div>
+</div>
+<div id="roomBadge"></div><div id="msg"></div><div id="role"></div><div id="hp">❤️ 100</div>
+<div id="stick"><div id="thumb"></div></div>
+<div id="fire">ضرب</div><div id="sprint">جري</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.0/peerjs.min.js"></script>
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s)};
+if(typeof THREE==='undefined'||typeof Peer==='undefined'){$('#status').textContent='فشل التحميل';return}
+
+var M=21,C=6,H=M*C/2,WH=7,maze=[];
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function genMaze(seed){
+ var rnd=mulberry32(seed|0);maze=[];
+ for(var i=0;i<M;i++){maze[i]=[];for(var j=0;j<M;j++)maze[i][j]=1}
+ var st=[[1,1]];maze[1][1]=0;var d=[[0,2],[0,-2],[2,0],[-2,0]];
+ while(st.length){
+  var c=st[st.length-1],ne=[];
+  for(var k=0;k<4;k++){
+   var nx=c[0]+d[k][0],ny=c[1]+d[k][1];
+   if(nx>0&&nx<M-1&&ny>0&&ny<M-1&&maze[ny][nx]===1)ne.push([nx,ny,d[k][0]/2,d[k][1]/2]);
+  }
+  if(!ne.length){st.pop();continue}
+  var p=ne[~~(rnd()*ne.length)];
+  maze[c[1]+p[3]][c[0]+p[2]]=0;maze[p[1]][p[0]]=0;st.push([p[0],p[1]]);
+ }
+ for(var q=0;q<35;q++)maze[1+~~(rnd()*(M-2))][1+~~(rnd()*(M-2))]=0;
+ maze[M-2][M-2]=0;maze[M-3][M-2]=0;maze[M-2][1]=0;maze[M-3][1]=0;
+}
+genMaze(1);
+function cw(cx,cy){return{x:cx*C-H+C/2,z:cy*C-H+C/2}}
+function isW(wx,wz){
+ var cx=~~((wx+H)/C),cy=~~((wz+H)/C);
+ if(cx<0||cx>=M||cy<0||cy>=M)return true;
+ return maze[cy][cx]===1;
+}
+function randSpot(ax,az,md){
+ for(var t=0;t<80;t++){
+  var cx=1+~~(Math.random()*(M-2)),cy=1+~~(Math.random()*(M-2));
+  if(maze[cy][cx]===1)continue;
+  var w=cw(cx,cy);
+  if(md&&Math.hypot(w.x-ax,w.z-az)<md)continue;
+  return w;
+ }
+ return cw(1,1);
+}
+
+var P={x:0,z:0,yaw:0,pitch:0},code='',peer=null,conn=null,isHost=false,
+    role=null,rp=null,last=0,prev=0,svX=0,svY=0,stickId=null,
+    lookId=null,llX=0,llY=0,state='play',started=false,retryMode='',
+    scene,camera,renderer,holePos,s0,msgCache='',
+    hp=100,remoteHp=100,club=null,swingT=0,hostSeed=0,sprinting=false;
+
+function initScene(){
+ try{renderer=new THREE.WebGLRenderer()}catch(e){$('#status').textContent='لا يدعم WebGL';return false}
+ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+ renderer.setSize(innerWidth,innerHeight);
+ document.body.appendChild(renderer.domElement);
+ scene=new THREE.Scene();
+ scene.background=new THREE.Color(0x000000);
+ scene.fog=new THREE.Fog(0x000000,18,75);
+ camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.1,250);
+ scene.add(camera);
+ scene.add(new THREE.AmbientLight(0xfff0c0,.55));
+
+ var URL='https://i.postimg.cc/0QQB9Fcy/free-backrooms-wallpaper-v0-65g3p16dkqg81.jpg';
+ var wT=new THREE.TextureLoader().load(URL);
+ wT.wrapS=wT.wrapT=THREE.RepeatWrapping;wT.repeat.set(1,1);
+ var wM=new THREE.MeshLambertMaterial({map:wT});
+ var blk=0x000000;
+ var paleYellow=0x3a3520;
+ var gnd=new THREE.Mesh(new THREE.PlaneGeometry(M*C,M*C),
+  new THREE.MeshLambertMaterial({color:paleYellow}));
+ gnd.rotation.x=-Math.PI/2;scene.add(gnd);
+ var ceil=new THREE.Mesh(new THREE.PlaneGeometry(M*C,M*C),
+  new THREE.MeshLambertMaterial({color:blk}));
+ ceil.rotation.x=Math.PI/2;ceil.position.y=WH;scene.add(ceil);
+
+ for(var yy=0;yy<M;yy++)for(var xx=0;xx<M;xx++){
+  var w=cw(xx,yy);
+  if(maze[yy][xx]===1){
+   var bx=new THREE.Mesh(new THREE.BoxGeometry(C,WH,C),wM);
+   bx.position.set(w.x,WH/2,w.z);scene.add(bx);
+  }
+  if(xx%4===2&&yy%4===2){
+   var pl=new THREE.PointLight(0xffe090,1.1,32,1.6);
+   pl.position.set(w.x,WH-1.2,w.z);scene.add(pl);
+   var lb=new THREE.Mesh(new THREE.SphereGeometry(.22,8,8),
+    new THREE.MeshBasicMaterial({color:0xffffee}));
+   lb.position.set(w.x,WH-.6,w.z);scene.add(lb);
+  }
+ }
+
+ holePos=cw(M-2,M-2);
+ var hole=new THREE.Mesh(new THREE.CircleGeometry(1.6,24),
+  new THREE.MeshBasicMaterial({color:0x000000}));
+ hole.rotation.x=-Math.PI/2;hole.position.set(holePos.x,.05,holePos.z);scene.add(hole);
+ var hr=new THREE.Mesh(new THREE.RingGeometry(1.6,2,24),
+  new THREE.MeshBasicMaterial({color:0xa855f7,side:THREE.DoubleSide}));
+ hr.rotation.x=-Math.PI/2;hr.position.set(holePos.x,.06,holePos.z);scene.add(hr);
+
+ var cg=new THREE.Group();
+ var woodM=new THREE.MeshLambertMaterial({color:0x6a4a2a,depthTest:false});
+ var headM=new THREE.MeshLambertMaterial({color:0x3a2410,depthTest:false});
+ var handle=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1.0,8),woodM);
+ handle.position.y=.5;handle.renderOrder=999;cg.add(handle);
+ var head=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),headM);
+ head.position.y=1.15;head.renderOrder=999;cg.add(head);
+ cg.position.set(.55,-.75,-.5);cg.rotation.y=.2;cg.visible=false;
+ club=cg;camera.add(cg);
+ return true;
+}
+
+function mkPlayer(){
+ var g=new THREE.Group();
+ var skinM=new THREE.MeshLambertMaterial({color:0xf5cd30});
+ var bodyM=new THREE.MeshLambertMaterial({color:0x2f6fe0});
+ var legsM=new THREE.MeshLambertMaterial({color:0x3fbf3f});
+ var eyeM=new THREE.MeshBasicMaterial({color:0x000000});
+ function b(w,h,d,m,x,y,z){var o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);g.add(o)}
+ b(0.88,1.08,0.42,legsM, 0, 0.54, 0);
+ b(0.88,0.9,0.46,bodyM, 0, 1.53, 0);
+ b(0.4,0.9,0.42,skinM, -0.64, 1.53, 0);
+ b(0.4,0.9,0.42,skinM, 0.64, 1.53, 0);
+ b(0.56,0.52,0.56,skinM, 0, 2.24, 0);
+ b(0.08,0.08,0.02,eyeM, -0.12, 2.28, 0.29);
+ b(0.08,0.08,0.02,eyeM, 0.12, 2.28, 0.29);
+ g.scale.set(0.65,0.65,0.65);
+ return g;
+}
+
+function setMsg(t){if(t===msgCache)return;msgCache=t;var e=$('#msg');if(t){e.textContent=t;e.style.display='block'}else e.style.display='none'}
+function setRole(t){var e=$('#role');if(t){e.textContent=t;e.style.display='block'}else e.style.display='none'}
+function genCode(){var s='';for(var i=0;i<3;i++)s+=~~(Math.random()*10);return s}
+function showRetry(m,mode){$('#status').textContent=m;retryMode=mode;$('#retryBtn').style.display='block'}
+function updateHp(){$('#hp').textContent='❤️ '+Math.max(0,hp)}
+
+var PC={debug:0,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'}]}};
+function makePeer(id){try{return id?new Peer(id,PC):new Peer(PC)}catch(e){return null}}
+
+function createRoom(att){
+ att=att||0;
+ if(att>=6){showRetry('السيرفر مزحوم','create');return}
+ code=genCode();
+ hostSeed=Math.floor(Math.random()*1e9);
+ genMaze(hostSeed);
+ $('#roomCode').textContent=code;$('#roomCode').style.display='block';
+ $('#status').textContent='جاري الاتصال... ('+(att+1)+'/6)';
+ if(peer)try{peer.destroy()}catch(e){}
+ peer=makePeer('wmgz'+code);
+ if(!peer){setTimeout(function(){createRoom(att+1)},1200);return}
+ var opened=false;
+ peer.on('open',function(){
+  opened=true;isHost=true;role='hunter';
+  $('#createBtn').style.display='none';$('#joinBtn').style.display='none';
+  $('#status').textContent='✓ أعط الرمز لصاحبك';
+  $('#retryBtn').style.display='none';
+  startGame();
+ });
+ peer.on('connection',function(c){
+  conn=c;
+  c.on('open',function(){
+   role='hunter';
+   conn.send({t:'r',role:'runner',seed:hostSeed});
+   setRole('أنت الوحش 🔫');
+   $('#fire').style.display='flex';
+   setMsg('صاحبك وصل! 👥');setTimeout(function(){setMsg('')},2000);
+  });
+  c.on('data',onData);
+  c.on('close',function(){conn=null;rp=null;setMsg('انقطع الاتصال')});
+ });
+ peer.on('error',function(e){
+  if(opened)return;
+  var t=e&&e.type;
+  if(t==='unavailable-id'||t==='server-error'||t==='network'||t==='socket-error')
+   setTimeout(function(){createRoom(att+1)},1000);
+  else showRetry('خطأ: '+t,'create');
+ });
+ setTimeout(function(){if(!opened&&att<6){try{peer.destroy()}catch(e){}createRoom(att+1)}},7000);
+}
+
+function joinRoom(att){
+ att=att||0;
+ if(att>=6){showRetry('ما لقيت الغرفة','join');return}
+ $('#status').textContent='جاري الاتصال... ('+(att+1)+'/6)';
+ if(peer)try{peer.destroy()}catch(e){}
+ peer=makePeer(null);
+ if(!peer){setTimeout(function(){joinRoom(att+1)},1200);return}
+ var connected=false;
+ peer.on('open',function(){
+  conn=peer.connect('wmgz'+code,{reliable:true});
+  conn.on('open',function(){
+   connected=true;isHost=false;
+   $('#joinBtn').style.display='none';$('#joinOk').style.display='none';
+   $('#codeInput').style.display='none';
+   $('#status').textContent='متصل!';
+  });
+  conn.on('data',onData);
+  conn.on('close',function(){conn=null;rp=null;setMsg('انقطع الاتصال')});
+ });
+ peer.on('error',function(e){
+  if(connected)return;
+  var t=e&&e.type;
+  if(t==='peer-unavailable')setTimeout(function(){joinRoom(att+1)},1500);
+  else if(t==='server-error'||t==='network'||t==='socket-error')setTimeout(function(){joinRoom(att+1)},1000);
+  else showRetry('خطأ: '+t,'join');
+ });
+ setTimeout(function(){if(!connected&&att<6){try{peer.destroy()}catch(e){}joinRoom(att+1)}},8000);
+}
+
+function respawnPlayer(){
+ var sp=randSpot(rp?rp.tx:P.x,rp?rp.tz:P.z,15);
+ P.x=sp.x;P.z=sp.z;
+ if(conn&&conn.open)conn.send({t:'rs',x:P.x,z:P.z});
+}
+
+function onData(d){
+ if(!d||!d.t)return;
+ if(d.t==='s'){
+  if(!rp){var g=mkPlayer();g.position.set(d.x,0,d.z);scene.add(g);rp={x:d.x,z:d.z,tx:d.x,tz:d.z,mesh:g}}
+  rp.tx=d.x;rp.tz=d.z;
+ }
+ if(d.t==='rs'&&rp){rp.x=d.x;rp.z=d.z;rp.tx=d.x;rp.tz=d.z}
+ if(d.t==='r'){
+  role=d.role;
+  if(d.seed!==undefined)genMaze(d.seed);
+  if(!started){startGame();setMsg('متصل ✓');setTimeout(function(){setMsg('')},1500)}
+  if(role==='hunter'){$('#fire').style.display='flex';setRole('أنت الوحش 🔫')}
+  else setRole('أنت الهارب 🏃');
+ }
+ if(d.t==='hit'){
+  hp-=d.dmg;updateHp();
+  if(hp<=0){
+   state='over';setMsg('مُت! 💀');
+   if(conn&&conn.open)conn.send({t:'dead'});
+   if(navigator.vibrate)navigator.vibrate([100,50,100,50,100]);
+   setTimeout(function(){hp=100;updateHp();state='play';setMsg('');respawnPlayer()},2500);
+  } else {
+   setMsg('أصابك! -'+d.dmg);
+   if(navigator.vibrate)navigator.vibrate(30);
+   setTimeout(function(){setMsg('')},700);
+  }
+ }
+ if(d.t==='dead'){
+  state='over';setMsg('قتلته! 🎉');remoteHp=100;
+  if(navigator.vibrate)navigator.vibrate(80);
+  setTimeout(function(){state='play';setMsg('');respawnPlayer()},2500);
+ }
+ if(d.t==='w'){
+  state='over';setMsg('صاحبك هرب! 🏃');
+  setTimeout(function(){state='play';setMsg('');respawnPlayer()},3000);
+ }
+}
+
+function shoot(){
+ if(state!=='play'||role!=='hunter')return;
+ swingT=.3;
+ if(navigator.vibrate)navigator.vibrate(20);
+ if(!rp)return;
+ if(Math.hypot(rp.tx-P.x,rp.tz-P.z)<2.6){
+  remoteHp-=34;
+  if(conn&&conn.open)conn.send({t:'hit',dmg:34});
+  setMsg(remoteHp<=0?'قتلته! 🎉':'أصبت! باقي '+Math.max(0,remoteHp));
+  setTimeout(function(){setMsg('')},800);
+ }
+}
+
+var SB=$('#stick'),ST=$('#thumb'),spBtn=$('#sprint');
+function setStick(t){
+ var r=SB.getBoundingClientRect();
+ var dx=t.clientX-(r.left+r.width/2),dy=t.clientY-(r.top+r.height/2);
+ var d=Math.hypot(dx,dy),maxR=48;
+ if(d>maxR){dx=dx/d*maxR;dy=dy/d*maxR}
+ ST.style.transform='translate('+dx+'px,'+dy+'px)';
+ svX=dx/maxR;svY=dy/maxR;
+}
+document.addEventListener('touchstart',function(e){
+ for(var i=0;i<e.changedTouches.length;i++){
+  var t=e.changedTouches[i],el=document.elementFromPoint(t.clientX,t.clientY);
+  if(!el)continue;
+  if(el.id==='sprint'){e.preventDefault();sprinting=!sprinting;spBtn.classList.toggle('on',sprinting);continue}
+  if(el.id==='stick'||el.parentNode.id==='stick'){if(!stickId){stickId=t.identifier;setStick(t)}}
+  else if(el.id==='fire')shoot();
+  else if(!lookId&&started){lookId=t.identifier;llX=t.clientX;llY=t.clientY}
+ }
+},{passive:false});
+document.addEventListener('touchmove',function(e){
+ for(var i=0;i<e.changedTouches.length;i++){
+  var t=e.changedTouches[i];
+  if(t.identifier===stickId)setStick(t);
+  else if(t.identifier===lookId){
+   P.yaw-=(t.clientX-llX)*.005;
+   P.pitch=Math.max(-1.2,Math.min(1.2,P.pitch-(t.clientY-llY)*.004));
+   llX=t.clientX;llY=t.clientY;
+  }
+ }
+},{passive:true});
+function endT(e){
+ for(var i=0;i<e.changedTouches.length;i++){
+  var t=e.changedTouches[i];
+  if(t.identifier===stickId){stickId=null;svX=0;svY=0;ST.style.transform='translate(0,0)'}
+  if(t.identifier===lookId)lookId=null;
+ }
+}
+document.addEventListener('touchend',endT,{passive:true});
+document.addEventListener('touchcancel',endT,{passive:true});
+spBtn.addEventListener('mousedown',function(e){e.preventDefault();sprinting=!sprinting;spBtn.classList.toggle('on',sprinting)});
+
+var keys={};
+document.addEventListener('keydown',function(e){keys[e.code]=true;if(e.code==='Space')shoot()});
+document.addEventListener('keyup',function(e){keys[e.code]=false});
+
+addEventListener('resize',function(){
+ if(!camera)return;
+ camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+
+$('#createBtn').onclick=function(){$('#createBtn').disabled=true;$('#joinBtn').disabled=true;createRoom(0)};
+$('#joinBtn').onclick=function(){
+ $('#createBtn').style.display='none';$('#joinBtn').style.display='none';
+ $('#codeInput').style.display='block';$('#joinOk').style.display='block';
+ $('#codeInput').focus();$('#status').textContent='اكتب رمز صاحبك';
+};
+$('#joinOk').onclick=function(){
+ var v=$('#codeInput').value.replace(/\D/g,'');
+ if(v.length!==3){$('#codeInput').style.borderColor='#ff4060';return}
+ code=v;$('#joinOk').disabled=true;joinRoom(0);
+};
+$('#retryBtn').onclick=function(){
+ $('#retryBtn').style.display='none';
+ if(retryMode==='create'){
+  $('#createBtn').style.display='block';$('#createBtn').disabled=false;
+  $('#joinBtn').style.display='block';$('#joinBtn').disabled=false;
+  $('#roomCode').style.display='none';$('#status').textContent='اختر';
+ }else{
+  $('#joinOk').style.display='block';$('#joinOk').disabled=false;$('#status').textContent='حاول';
+ }
+};
+$('#codeInput').addEventListener('input',function(){this.value=this.value.replace(/\D/g,'').slice(0,3)});
+
+function startGame(){
+ if(started)return;
+ if(!initScene())return;
+ started=true;
+ s0=isHost?cw(1,1):cw(M-2,1);
+ P.x=s0.x;P.z=s0.z;
+ $('#menu').style.display='none';
+ $('#stick').style.display='block';
+ $('#sprint').style.display='flex';
+ $('#hp').style.display='block';
+ $('#roomBadge').textContent='#'+code;
+ $('#roomBadge').style.display='block';
+ if(isHost){role='hunter';setRole('استنى صاحبك — أنت الوحش')}
+ updateHp();
+ prev=performance.now();loop();
+}
+
+function loop(){
+ requestAnimationFrame(loop);
+ var now=performance.now(),dt=(now-prev)/1000;prev=now;
+ if(dt>.05)dt=.05;
+
+ if(state==='play'){
+  var mf=-svY,ms=svX;
+  if(keys['KeyW'])mf+=1;if(keys['KeyS'])mf-=1;
+  if(keys['KeyD'])ms+=1;if(keys['KeyA'])ms-=1;
+  var dx=Math.sin(P.yaw)*mf-Math.cos(P.yaw)*ms,
+      dz=Math.cos(P.yaw)*mf+Math.sin(P.yaw)*ms;
+  var len=Math.hypot(dx,dz);
+  if(len>.01){
+   var mul=sprinting?2.5:1;
+   var sp=5*mul*Math.min(len,1),nx=P.x+dx/len*sp*dt,nz=P.z+dz/len*sp*dt;
+   if(!isW(nx,P.z))P.x=nx;
+   if(!isW(P.x,nz))P.z=nz;
+  }
+  if(role==='runner'&&Math.hypot(P.x-holePos.x,P.z-holePos.z)<1.5){
+   state='over';setMsg('فزت! 🎉');
+   if(conn&&conn.open)conn.send({t:'w',r:'hole'});
+   if(navigator.vibrate)navigator.vibrate(80);
+   setTimeout(function(){state='play';setMsg('');respawnPlayer()},3000);
+  }
+ }
+
+ var cp=Math.cos(P.pitch);
+ camera.position.set(P.x,1.6,P.z);
+ camera.lookAt(P.x+Math.sin(P.yaw)*cp*10,1.6+Math.sin(P.pitch)*10,P.z+Math.cos(P.yaw)*cp*10);
+
+ if(club){
+  club.visible=(role==='hunter');
+  if(swingT>0){swingT-=dt;club.rotation.x=Math.sin((1-swingT/.3)*Math.PI)*1.5}
+  else club.rotation.x=0;
+ }
+
+ if(rp){
+  rp.x+=(rp.tx-rp.x)*.35;rp.z+=(rp.tz-rp.z)*.35;
+  rp.mesh.position.set(rp.x,0,rp.z);
+  rp.mesh.rotation.y=Math.atan2(P.x-rp.x,P.z-rp.z);
+ }
+
+ if(conn&&conn.open&&now-last>40){last=now;conn.send({t:'s',x:P.x,z:P.z})}
+ renderer.render(scene,camera);
+}
+})();
+</script>
+</body>
+</html>
